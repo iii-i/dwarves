@@ -227,6 +227,7 @@ static const char * const btf_kind_str[NR_BTF_KINDS] = {
 	[BTF_KIND_FUNC_PROTO]	= "FUNC_PROTO",
 	[BTF_KIND_VAR]          = "VAR",
 	[BTF_KIND_DATASEC]      = "DATASEC",
+	[BTF_KIND_FLOAT]        = "FLOAT",
 };
 
 static const char *btf_elf__printable_name(const struct btf_elf *btfe, uint32_t offset)
@@ -367,6 +368,27 @@ static void btf_log_func_param(const struct btf_elf *btfe,
 	}
 }
 
+static int32_t btf_elf__add_float_type(struct btf_elf *btfe,
+				       const struct base_type *bt,
+				       const char *name)
+{
+	int32_t id;
+
+	id = btf__add_float(btfe->btf, name, BITS_ROUNDUP_BYTES(bt->bit_size));
+	if (id < 0) {
+		btf_elf__log_err(btfe, BTF_KIND_FLOAT, name, true, "Error emitting BTF type");
+	} else {
+		const struct btf_type *t;
+
+		t = btf__type_by_id(btfe->btf, id);
+		btf_elf__log_type(btfe, t, false, true,
+				"size=%u nr_bits=%u",
+				t->size, bt->bit_size);
+	}
+
+	return id;
+}
+
 int32_t btf_elf__add_base_type(struct btf_elf *btfe, const struct base_type *bt,
 			       const char *name)
 {
@@ -380,7 +402,11 @@ int32_t btf_elf__add_base_type(struct btf_elf *btfe, const struct base_type *bt,
 	} else if (bt->is_bool) {
 		encoding = BTF_INT_BOOL;
 	} else if (bt->float_type) {
-		fprintf(stderr, "float_type is not supported\n");
+		if (bt->float_type == BT_FP_SINGLE ||
+		    bt->float_type == BT_FP_DOUBLE ||
+		    bt->float_type == BT_FP_LDBL)
+			return btf_elf__add_float_type(btfe, bt, name);
+		fprintf(stderr, "Complex, interval and imaginary float types are not supported\n");
 		return -1;
 	}
 
@@ -819,6 +845,8 @@ out:
 int btf_elf__encode(struct btf_elf *btfe, uint8_t flags)
 {
 	struct btf *btf = btfe->btf;
+
+	libbpf_set_print(libbpf_log);
 
 	/* Empty file, nothing to do, so... done! */
 	if (btf__get_nr_types(btf) == 0)
