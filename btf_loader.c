@@ -160,11 +160,11 @@ static struct variable *variable__new(strings_t name, uint32_t linkage)
 	return var;
 }
 
-static int create_new_base_type(struct btf_elf *btfe, const struct btf_type *tp, uint32_t id)
+static int create_new_base_type(struct btf_elf *btfe, const struct btf_type *tp, uint32_t id, uint8_t float_type)
 {
 	uint32_t attrs = btf_int_encoding(tp);
 	strings_t name = tp->name_off;
-	struct base_type *base = base_type__new(name, attrs, 0, btf_int_bits(tp));
+	struct base_type *base = base_type__new(name, attrs, float_type, btf_int_bits(tp));
 
 	if (base == NULL)
 		return -ENOMEM;
@@ -397,7 +397,7 @@ static int btf_elf__load_types(struct btf_elf *btfe)
 
 		switch (type) {
 		case BTF_KIND_INT:
-			err = create_new_base_type(btfe, type_ptr, type_index);
+			err = create_new_base_type(btfe, type_ptr, type_index, 0);
 			break;
 		case BTF_KIND_ARRAY:
 			err = create_new_array(btfe, type_ptr, type_index);
@@ -441,6 +441,9 @@ static int btf_elf__load_types(struct btf_elf *btfe)
 		case BTF_KIND_FUNC:
 			// BTF_KIND_FUNC corresponding to a defined subprogram.
 			err = create_new_function(btfe, type_ptr, type_index);
+			break;
+		case BTF_KIND_FLOAT:
+			err = create_new_base_type(btfe, type_ptr, type_index, BT_FP_SINGLE);
 			break;
 		default:
 			fprintf(stderr, "BTF: idx: %d, Unknown kind %d\n", type_index, type);
